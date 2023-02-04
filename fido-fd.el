@@ -1029,7 +1029,8 @@ Default value for ACTION is find file."
   (interactive)
   (setq fido-fd-current-dir (fido-fd-slash
                              (expand-file-name
-                              (or directory fido-fd-current-dir))))
+                              (or directory fido-fd-current-dir
+                                  default-directory))))
   (setq fido-fd-args (or args (transient-args transient-current-command)))
   (setq fido-fd-cands nil)
   (setq fido-fd-async-command (concat fido-fd-exec-path " -0 --color=never "
