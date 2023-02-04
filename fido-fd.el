@@ -880,8 +880,7 @@ If FILENAME is absolute just return it."
   :argument-format "%s"
   :argument-regexp "\\(--ignore-case\\)\\|\\(--case-sensitive\\)"
   :choices '("--ignore-case" "--case-sensitive"))
-(setq fido-fd-args '("--no-ignore-vcs" "--ignore-case" "--glob" "-e el"
-                     "-e js" "--exclude '-autoloads.el'" "--type=file"))
+
 
 ;;;###autoload (autoload fido-fd-transient "fido-fd.el" nil t)
 (transient-define-prefix fido-fd-transient ()
