@@ -114,6 +114,7 @@ at the values with which this function was called."
 (defvar fido-fd-current-dir nil)
 (defvar fido-fd-last-input nil)
 
+;;;###autoload
 (defun fido-fd-next-switch ()
   "Select next element from `fido-fd-switches'."
   (interactive)
@@ -127,7 +128,7 @@ at the values with which this function was called."
     (setq fido-fd-current-dir (car switches))
     (setq fido-fd-args (cdr switches))
     (if (not (minibufferp))
-        (apply 'fido-fd-async fido-fd-current-dir switches
+        (apply #'fido-fd-async fido-fd-current-dir switches
                fido-fd-last-input)
       (setq fido-fd-last-input
             (minibuffer-contents-no-properties))
@@ -698,7 +699,7 @@ Display remains until next event is input."
   (if (active-minibuffer-window)
       (progn
         (setq fido-fd-last-input (minibuffer-contents-no-properties))
-        (run-with-timer 0.2 nil 'fido-fd-transient)
+        (run-with-timer 0.2 nil #'fido-fd-transient)
         (abort-minibuffers))
     (fido-fd-transient)))
 
@@ -882,7 +883,7 @@ If FILENAME is absolute just return it."
   :choices '("--ignore-case" "--case-sensitive"))
 
 
-;;;###autoload (autoload fido-fd-transient "fido-fd.el" nil t)
+;;;###autoload (autoload 'fido-fd-transient "fido-fd.el" nil t)
 (transient-define-prefix fido-fd-transient ()
   "Fd 8.3.1.
 USAGE:
@@ -971,6 +972,7 @@ File is detected from `minibuffer-contents'."
                   dir fido-fd-args fido-fd-last-input)
   (abort-minibuffers))
 
+;;;###autoload
 (defun fido-fd-home-dir ()
   "Change fd home dir."
   (interactive)
@@ -991,8 +993,6 @@ File is detected from `minibuffer-contents'."
     (define-key map (kbd "C-]") #'fido-fd-next-switch)
     (define-key map (kbd "M-<up>") #'fido-fd-change-max-depth)
     map))
-
-(defvar fido-fd-sync-command nil)
 
 
 (defun fido-fd-resolve-project-root ()
