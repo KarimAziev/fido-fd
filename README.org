@@ -1,0 +1,75 @@
+* fido-fd
+
+Fido (icomplete) interface For Fd.
+
+** Installation
+
+Emacs >= 28.1 is required.
+
+*** Manual
+
+Ensure that you have installed required dependencies: 
+- ~emacs~ >= 28.1
+
+Download the source code and put it wherever you like, e.g. into =~/.emacs.d/fido-fd/=
+
+#+begin_src shell :eval no
+git clone https://github.com/KarimAziev/fido-fd.git ~/.emacs.d/fido-fd/
+#+end_src
+
+Add the downloaded directory to the load path:
+
+#+begin_src elisp :eval no
+(add-to-list 'load-path "~/.emacs.d/fido-fd/")
+(require 'fido-fd)
+#+end_src
+
+#+begin_src elisp :eval no
+
+
+(use-package fido-fd
+  :straight (fido-fd
+             :repo "KarimAziev/fido-fd"
+             :type git
+             :host github)
+  :bind ((:map fido-fd-map
+               ("C-j" . fido-fd-find-file-or-preview)
+               ("C-l" . fido-fd-find-directory-up)
+               ("C-q" . fido-fd-read-flags)
+               ("C-]" . fido-fd-next-switch)
+               ("~" . fido-fd-home-dir)
+               ("C-." . fido-fd-change-dir)
+               ("C-<backspace>" . fido-fd-find-directory-up)
+               ("M-<up>" . fido-fd-change-max-depth)
+               ("M-." . fido-fd-toggle-hidden)
+               ("C-c C-o" . fido-fd--find-file-other-window)))
+  :commands (fido-fd-async
+             fido-fd-async-project))
+
+#+end_src
+
+** Transient
+
+*** ~fido-fd-transient~
+Fd 8.3.1. =usage:= fd =[flags/options]= [<pattern>] [<path>...] =flags:=
+** Keymaps
+
+*** ~fido-fd-map~
+| Key           | Command                         | 
+|---------------+---------------------------------|
+| C-j           | fido-fd-find-file-or-preview    |
+| C-l           | fido-fd-find-directory-up       |
+| C-q           | fido-fd-read-flags              |
+| C-]           | fido-fd-next-switch             |
+| ~             | fido-fd-home-dir                |
+| C-.           | fido-fd-change-dir              |
+| C-<backspace> | fido-fd-find-directory-up       |
+| M-<up>        | fido-fd-change-max-depth        |
+| M-.           | fido-fd-toggle-hidden           |
+| C-c C-o       | fido-fd--find-file-other-window |
+** Commands
+
+*** ~fido-fd-async~  (&optional directory args input action-fn)
+Search in =directory= or =default-directory= with =input=. =args= and =action-fn=. Default value for =action= is find file.
+*** ~fido-fd-async-project~  (&optional directory initial-input)
+Search in =directory= or =default-directory= with =initial-input=.
