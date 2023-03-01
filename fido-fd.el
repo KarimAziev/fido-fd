@@ -29,7 +29,6 @@
 
 ;;; Code:
 
-(require 'icomplete)
 
 (defcustom fido-fd-multi-command-flags '("--changed-within 1d"
                                          "--changed-before 1d")
@@ -331,9 +330,15 @@ The time is measured in seconds.")
       (bound-and-true-p icomplete-mode)
       (bound-and-true-p fido-vertical-mode)))
 
+
+
 (defun fido-fd-exhibit ()
   "Invoke `icomplete-exhibit' or `minibuffer-completion-help'."
-  (icomplete-exhibit))
+  (when (minibufferp)
+    (when (and
+         (fido-fd-icomplete-mode-p)
+         (fboundp 'icomplete-exhibit))
+        (icomplete-exhibit))))
 
 (defun fido-fd--sync-sentinel-on-exit (process)
   "Synchronize PROCESS sentinel."
@@ -342,12 +347,13 @@ The time is measured in seconds.")
                                    (fido-fd--split-string)))
              (when fido-fd--async-start
                (setq fido-fd--async-duration
-                     (time-to-seconds (time-since fido-fd--async-start)))))
+                     (time-to-seconds (time-since fido-fd--async-start))))
+             (fido-fd-exhibit))
     (setq fido-fd--async-last-error-string
           (with-current-buffer (process-buffer process)
             (buffer-string)))
-    (setq fido-fd-cands nil))
-  (fido-fd-exhibit))
+    (setq fido-fd-cands nil)
+    (fido-fd-exhibit)))
 
 (defun fido-fd--split-string (&optional str)
   "Split STR or buffer string."
@@ -584,12 +590,13 @@ When GREEDY is non-nil, join words in a greedy way."
 (defun fido-fd-async-cmd (input)
   "Return a `mdfind' shell command based on INPUT."
   (let* ((regex (shell-quote-argument (fido-fd--elisp-to-pcre
-                                       (fido-fd--regex input))))
+                                       (fido-fd--regex (file-name-nondirectory
+                                                        (or input ""))))))
          (cmd (apply #'format fido-fd-async-command
                      (append
                       (make-vector
                        (fido-fd-count-matches-by-re "%s"
-                                                   fido-fd-async-command)
+                                                    fido-fd-async-command)
                        regex)
                       nil))))
     cmd))
@@ -598,7 +605,7 @@ When GREEDY is non-nil, join words in a greedy way."
   "History for `fido-fd-async'.")
 
 (defun fido-fd-async-function (input &rest _)
-  "Call a \"locate\" style shell command with INPUT."
+  "Execute fd command with INPUT."
   (or
    (progn
      (fido-fd--async-command
@@ -699,6 +706,8 @@ Display remains until next event is input."
   (if (active-minibuffer-window)
       (progn
         (setq fido-fd-last-input (minibuffer-contents-no-properties))
+        (setq fido-fd-args fido-fd-args)
+        (setq fido-fd-current-dir fido-fd-current-dir)
         (run-with-timer 0.2 nil #'fido-fd-transient)
         (abort-minibuffers))
     (fido-fd-transient)))
@@ -711,7 +720,7 @@ Display remains until next event is input."
       (progn (setq fido-fd-last-input (minibuffer-contents-no-properties))
              (fido-fd-delete-process)
              (run-with-timer 0.2 nil
-                             #'(lambda nil
+                             (lambda nil
                                  (put 'quit 'error-message "Quit")
                                  (funcall-interactively #'fido-fd-async
                                                         (fido-fd-parent-dir
@@ -779,15 +788,15 @@ If FILENAME is absolute just return it."
   (if (active-minibuffer-window)
       (progn (setq fido-fd-last-input (minibuffer-contents-no-properties))
              (run-with-timer 0.2 nil
-                          #'(lambda (input)
-                              (let ((directory (read-directory-name
-                                                "Search in:\s")))
-                                (funcall-interactively
-                                 #'fido-fd-async
-                                 directory
-                                 fido-fd-args
-                                 input)))
-                          fido-fd-last-input)
+                             (lambda (input)
+                               (let ((directory (read-directory-name
+                                                 "Search in:\s")))
+                                 (funcall-interactively
+                                  #'fido-fd-async
+                                  directory
+                                  fido-fd-args
+                                  input)))
+                             fido-fd-last-input)
              (abort-minibuffers))
     (let ((directory (read-directory-name "Search in:\s")))
       (funcall-interactively #'fido-fd-async
@@ -804,6 +813,11 @@ If FILENAME is absolute just return it."
 (defun fido-fd-toggle-hidden ()
   "Toggle --hidden flag."
   (interactive)
+  (let ((flag (if (vc-root-dir) "--no-ignore-vcs" "--hidden")))
+    (setq fido-fd-args (if
+                           (member flag fido-fd-args)
+                           (delete flag fido-fd-args)
+                         (push flag fido-fd-args))))
   (setq fido-fd-args (if
                          (member "--hidden" fido-fd-args)
                          (delete "--hidden" fido-fd-args)
@@ -841,10 +855,12 @@ If FILENAME is absolute just return it."
   :class 'transient-option)
 
 ;;;###autoload
-(defun fido-fd-async-suffix ()
+(defun fido-fd-async-exit-and-run ()
   "Run `fido-fd-async' from `fido-fd-transient'."
   (interactive)
-  (fido-fd-async fido-fd-current-dir nil fido-fd-last-input))
+  (let ((args (transient-args transient-current-command)))
+    (run-with-timer 0.5 nil 'fido-fd-async fido-fd-current-dir args
+                    fido-fd-last-input)))
 
 ;;;###autoload
 (defun fido-fd-save-switches ()
@@ -866,7 +882,7 @@ If FILENAME is absolute just return it."
   :argument-format "%s"
   :argument-regexp
   "\\(--no-ignore\\)\\|\\(--no-ignore-parent\\)\\|\\(--no-ignore-vcs\\)"
-  :choices '("--no-ignore" "--no-ignore-vcs" "--no-ignore-parent"))
+  :choices '("--no-ignore-vcs" "--no-ignore" "--no-ignore-parent"))
 
 (transient-define-argument fido-fd-file-type-argument ()
   "Argument for toggle directory or file."
@@ -891,6 +907,7 @@ fd [FLAGS/OPTIONS] [<pattern>] [<path>...]
 
 FLAGS:"
   :value (lambda () fido-fd-args)
+  :man-page "fdfind"
   ["Flags"
    ("H" " Search hidden files and directories" "--hidden")
    ("I" "Ignore options" fido-fd-ignore-type-argument)
@@ -929,8 +946,9 @@ FLAGS:"
     :class transient-option
     :reader fido-fd-read-size)]
   ["Actions"
-   ("RET" "Run" fido-fd-async-suffix)
-   ("C-<return>" "Save" fido-fd-save-switches)
+   ("RET" "Run" fido-fd-async-exit-and-run :transient nil)
+   ("<return>" "Run" fido-fd-async-exit-and-run :transient nil)
+   ("C-c C-s" "Save" fido-fd-save-switches)
    ("q" "Quit" transient-quit-all)])
 
 ;;;###autoload
@@ -956,6 +974,7 @@ FLAGS:"
       content)))
 
 
+
 (defun fido-fd--find-file-other-window ()
   "Find file in other window and abort the current minibuffer.
 File is detected from `minibuffer-contents'."
@@ -966,7 +985,7 @@ File is detected from `minibuffer-contents'."
 
 (defun fido-fd--change-dir (dir)
   "Change fido directory DIR."
-  (setq fido-fd-last-input (minibuffer-contents-no-properties))
+  (setq fido-fd-last-input nil)
   (fido-fd-delete-process)
   (run-with-timer 0.2 nil 'fido-fd-async
                   dir fido-fd-args fido-fd-last-input)
@@ -980,93 +999,128 @@ File is detected from `minibuffer-contents'."
       (fido-fd--change-dir (expand-file-name "~/"))
     (fido-fd-async (expand-file-name "~/"))))
 
+;;;###autoload
+(defun fido-fd-vc-dir ()
+  "Change fd home dir."
+  (interactive)
+  (let ((proj (fido-fd-resolve-project-root)))
+    (when (and proj
+               (equal (expand-file-name proj)
+                      fido-fd-current-dir)
+               (fido-fd-parent-dir fido-fd-current-dir))
+      (let ((default-directory (fido-fd-parent-dir fido-fd-current-dir)))
+        (setq proj (or (fido-fd-resolve-project-root) proj))))
+    (if (active-minibuffer-window)
+        (fido-fd--change-dir (expand-file-name (or proj "~/")))
+      (fido-fd-async (expand-file-name (or proj "~/"))))))
+
+;;;###autoload
+(defun fido-fd-abs-dir ()
+  "Change fd home dir."
+  (interactive)
+  (add-to-list 'fido-fd-args "--exclude 'home'")
+  (if (active-minibuffer-window)
+      (fido-fd--change-dir (expand-file-name "/"))
+    (fido-fd-async "/" fido-fd-args)))
+
 (defvar fido-fd-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-<backspace>") #'fido-fd-find-directory-up)
     (define-key map (kbd "C-l") #'fido-fd-find-directory-up)
-    (define-key map (kbd "C-.")  #'fido-fd-change-dir)
+    (define-key map (kbd "C-x d")  #'fido-fd-change-dir)
     (define-key map (kbd "C-j") #'fido-fd-find-file-or-preview)
-    (define-key map (kbd "C-q")  #'fido-fd-read-flags)
+    (define-key map (kbd "C-.")  #'fido-fd-read-flags)
+    (define-key map (kbd "C-M-.")  #'fido-fd-read-flags)
     (define-key map (kbd "C-c C-o") #'fido-fd--find-file-other-window)
     (define-key map (kbd "~") #'fido-fd-home-dir)
     (define-key map (kbd "M-.") #'fido-fd-toggle-hidden)
-    (define-key map (kbd "C-]") #'fido-fd-next-switch)
+    (define-key map (kbd "C->") #'fido-fd-next-switch)
     (define-key map (kbd "M-<up>") #'fido-fd-change-max-depth)
     map))
-
 
 (defun fido-fd-resolve-project-root ()
   "Resolve project root by searching git directory."
   (locate-dominating-file default-directory ".git" ))
 
-;;;###autoload
-(defun fido-fd-async-project (&optional directory initial-input)
-  "Search in DIRECTORY or `default-directory' with INITIAL-INPUT."
-  (interactive)
-  (let ((project (or directory (funcall fido-fd-resolve-project-root-fn)
-                     default-directory)))
-    (funcall-interactively (or 'fido-fd-async)
-                           (or directory project) nil initial-input)))
-
 
 (defun fido-fd-update-directory ()
   "Fp update directory."
   (when (eq this-command 'icomplete-fido-backward-updir)
-    (remove-hook 'pre-command-hook #'fido-fd-update-directory t)
+    (remove-hook 'post-command-hook #'fido-fd-update-directory t)
     (fido-fd-find-directory-up)))
 
 (defun fido-fd-async-minibuffer-setup ()
   "Hook function for `icomplete-minibuffer-setup-hook'."
   (when (minibufferp)
-    (use-local-map (make-composed-keymap fido-fd-map
-                                         (current-local-map)))
-    (add-hook 'pre-command-hook #'fido-fd-update-directory nil t)))
+    (use-local-map (make-composed-keymap fido-fd-map (current-local-map)))
+    (insert (or fido-fd-last-input ""))))
 
 ;;;###autoload
-(defun fido-fd-async (&optional directory args input action-fn)
+(defun fido-fd-async-resume ()
   "Search in DIRECTORY or `default-directory' with INPUT, ARGS and ACTION-FN.
 Default value for ACTION is find file."
   (interactive)
-  (setq fido-fd-current-dir (fido-fd-slash
-                             (expand-file-name
-                              (or directory fido-fd-current-dir
-                                  default-directory))))
-  (setq fido-fd-args (or args (transient-args transient-current-command)))
-  (setq fido-fd-cands nil)
-  (setq fido-fd-async-command (concat fido-fd-exec-path " -0 --color=never "
-                                      (string-join fido-fd-args " ")
-                                      (concat " %s ")))
-  (unless fido-fd-current-dir
-    (setq fido-fd-current-dir default-directory))
+  (fido-fd-async fido-fd-current-dir fido-fd-args fido-fd-last-input nil t))
+
+
+;;;###autoload
+(defun fido-fd-async (&optional directory args input action-fn resume)
+  "Search in DIRECTORY or `default-directory' with INPUT, ARGS and ACTION-FN.
+Default value for ACTION is find file."
+  (interactive)
+  (unless resume
+    (setq fido-fd-current-dir (fido-fd-slash
+                               (expand-file-name
+                                (or directory
+                                    default-directory))))
+    (setq fido-fd-last-input input)
+    (setq fido-fd-args (or args fido-fd-args))
+    (setq fido-fd-cands nil)
+    (setq fido-fd-async-command (concat fido-fd-exec-path " -0 --color=never "
+                                        (string-join fido-fd-args " ")
+                                        (concat " %s ")))
+    (unless fido-fd-current-dir
+      (setq fido-fd-current-dir default-directory)))
   (unwind-protect
       (let ((default-directory fido-fd-current-dir))
-        (add-hook 'icomplete-minibuffer-setup-hook
-                  #'fido-fd-async-minibuffer-setup)
+        (when (bound-and-true-p icomplete-mode)
+          (add-hook 'icomplete-minibuffer-setup-hook
+                    #'fido-fd-async-minibuffer-setup))
+        (when (bound-and-true-p icomplete-vertical-mode)
+          (add-hook 'icomplete--vertical-minibuffer-setup
+                    #'fido-fd-async-minibuffer-setup))
+        (unless (bound-and-true-p icomplete-mode)
+          (add-hook 'minibuffer-setup-hook
+                    #'fido-fd-async-minibuffer-setup))
         (let ((file (completing-read-default
                      (concat
+                      "fd "
+                      (string-join fido-fd-args " ")
+                      " "
                       (abbreviate-file-name
                        fido-fd-current-dir)
-                      "")
+                      ": ")
                      (lambda (string pred action)
                        (if (eq action 'metadata)
                            `(metadata
-                             (cycle-sort-function .
-                                                  identity)
-                             (display-sort-function .
-                                                    identity)
                              (category . file))
                          (complete-with-action
                           action
-                          (fido-fd-async-function
-                           string)
+                          (if resume
+                              fido-fd-cands
+                            (fido-fd-async-function string))
                           string
                           pred)))
-                     nil nil input fido-fd-async-history)))
+                     nil nil nil fido-fd-async-history)))
           (if action-fn
               (funcall action-fn (fido-fd-expand-file file))
             (find-file file))))
     (fido-fd-delete-process)
     (remove-hook 'icomplete-minibuffer-setup-hook
+                 #'fido-fd-async-minibuffer-setup)
+    (remove-hook 'icomplete--vertical-minibuffer-setup
+                 #'fido-fd-async-minibuffer-setup)
+    (remove-hook 'minibuffer-setup-hook
                  #'fido-fd-async-minibuffer-setup)))
 
 (provide 'fido-fd)
