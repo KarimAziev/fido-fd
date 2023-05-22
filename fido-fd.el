@@ -485,8 +485,8 @@ caused by spawning too many subprocesses too quickly."
         i))))
 
 (defun fido-fd--regex-p (object)
-  "Return OBJECT if it is a valid regular expression, else nil."
-  (ignore-errors (string-match-p object "") object))
+	"Return OBJECT if it is a valid regular expression, else nil."
+	(ignore-errors (ignore (string-match-p object "")) object))
 
 (defun fido-fd--regex-or-literal (str)
   "If STR isn't a legal regexp, escape it."
