@@ -160,7 +160,7 @@ at the values with which this function was called."
 
 (defun fido-fd-parent-dir (path)
   "Return the parent directory to PATH with slash."
-  (when-let ((path (fido-fd-parent path)))
+  (when-let* ((path (fido-fd-parent path)))
     (fido-fd-slash path)))
 
 (defun fido-fd-generic-list-to-string (&rest flags)
@@ -621,7 +621,7 @@ Display remains until next event is input."
        file
        (file-directory-p file))
       (fido-fd-visit-dir file)
-    (when-let ((filename (and
+    (when-let* ((filename (and
                           file
                           (file-readable-p file)
                           (file-exists-p file)
@@ -979,7 +979,7 @@ FLAGS:"
   "Find file in other window and abort the current minibuffer.
 File is detected from `minibuffer-contents'."
   (interactive)
-  (when-let ((file (fido-fd-preview-get-file)))
+  (when-let* ((file (fido-fd-preview-get-file)))
     (run-with-timer 0.2 nil #'find-file-other-window file)
     (abort-minibuffers)))
 
